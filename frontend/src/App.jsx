@@ -1,180 +1,210 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import CreateAudiobook from './components/CreateAudiobook';
+import AudioVisualizer from './AudioVisualizer';
 
 function App() {
-  // Form ke liye states
-  const [title, setTitle] = useState('');
-  const [author, setAuthor] = useState('');
-  const [rawText, setRawText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
-
-  // Catalog aur Audio ke liye naye states
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [textbooks, setTextbooks] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [audioLoadingId, setAudioLoadingId] = useState(null);
   const [currentAudio, setCurrentAudio] = useState('');
   const [activeBookTitle, setActiveBookTitle] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false); // Live state indicator for toggle
+  const [message, setMessage] = useState({ type: '', text: '' });
 
-  // 1. Database se saari books fetch karne ka function
+  const audioRef = useRef(null);
+
   const fetchTextbooks = async () => {
     try {
       const response = await axios.get('http://localhost:5000/api/textbooks');
-      if (response.data.success) {
-        setTextbooks(response.data.data);
-      }
-    } catch (error) {
-      console.error("Unable to load books", error);
+      if (response.data.success) setTextbooks(response.data.data);
+    } catch (err) {
+      console.error("Fetch layout error", err);
     }
   };
 
-  // 2. useEffect: Page load hote hi automatic books fetch karega
   useEffect(() => {
     fetchTextbooks();
   }, []);
 
-  // Form Submit Handler
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleUploadTextbook = async (formData) => {
     setLoading(true);
     setMessage({ type: '', text: '' });
-
     try {
       const response = await axios.post('http://localhost:5000/api/textbooks', {
-        title,
-        author,
-        uploadedBy: 'Vaishnavi',
-        rawText
+        ...formData,
+        uploadedBy: 'Vaishnavi'
       });
-
       if (response.data.success) {
-        setMessage({ type: 'success', text: 'Boom! Textbook successfully saved in database! 📚' });
-        setTitle('');
-        setAuthor('');
-        setRawText('');
-        fetchTextbooks(); // Nayi book upload hote hi catalog ko refresh karo!
+        setMessage({ type: 'success', text: 'Boom! Project saved to library! 📚' });
+        fetchTextbooks();
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Server error: Unable to save book' });
+      setMessage({ type: 'error', text: 'Failed to push data.' });
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Audio engine ko call karne ka function
+  // Upgraded Audio Function with Play/Pause state toggle
   const handlePlayAudio = async (bookId, bookTitle) => {
+    // Agar wahi same audio baj raha hai, toh naya fetch mat karo, use hi pause/play karo!
+    if (activeBookTitle === bookTitle && currentAudio) {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
+      return;
+    }
+
     setAudioLoadingId(bookId);
     try {
       const response = await axios.get(`http://localhost:5000/api/textbooks/${bookId}/audio`);
       if (response.data.success) {
         setCurrentAudio(response.data.audioUrl);
         setActiveBookTitle(bookTitle);
+        setIsPlaying(true);
+        
+        // Load target inside core ref
+        if (audioRef.current) {
+          audioRef.current.src = response.data.audioUrl;
+          audioRef.current.play();
+        }
       }
     } catch (error) {
-      console.error("Error generating audio", error);
-      alert("Unable to generate audio. Please try again later.");
+      alert("Audio synthesizer trigger failed.");
     } finally {
       setAudioLoadingId(null);
     }
   };
 
+  // Master Global Player Toggle Action
+  const toggleGlobalPlayback = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center py-10 px-4 pb-32">
-      {/* Header */}
-      <header className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-indigo-400 tracking-wide mb-2">LexiSonic Engine</h1>
-        <p className="text-slate-400">Upload textbooks and convert them to speech instantly</p>
-      </header>
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased flex">
+      {/* Invisible core HTML5 audio player tracking stream */}
+      <audio ref={audioRef} onEnded={() => setIsPlaying(false)} className="hidden" />
 
-      {/* Grid Layout: Left side Form, Right side Catalog */}
-      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* LEFT COLUMN: FORM (4 Cols) */}
-        <div className="lg:col-span-5 bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700 h-fit">
-          <h2 className="text-xl font-semibold mb-4 text-indigo-300">Add New Textbook</h2>
-          
-          {message.text && (
-            <div className={`p-3 rounded-xl mb-4 text-xs font-medium ${
-              message.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-            }`}>
-              {message.text}
-            </div>
-          )}
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Book Title *</label>
-              <input 
-                type="text" required placeholder="e.g. Real Analysis" value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Author Name</label>
-              <input 
-                type="text" placeholder="e.g. Robert G. Bartle" value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Text Content *</label>
-              <textarea 
-                required rows="5" placeholder="Paste textbook content here..." value={rawText}
-                onChange={(e) => setRawText(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 resize-none"
-              />
-            </div>
-            <button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white font-semibold py-2.5 rounded-xl transition-all text-sm">
-              {loading ? 'Saving...' : 'Upload & Process 🚀'}
-            </button>
-          </form>
-        </div>
+      <div className="flex-1 pl-64 flex flex-col min-h-screen">
+        <Header />
 
-        {/* RIGHT COLUMN: TEXTBOOK CATALOG (7 Cols) */}
-        <div className="lg:col-span-7 space-y-4">
-          <h2 className="text-2xl font-bold text-slate-200 mb-2">Your Textbook Library ({textbooks.length})</h2>
-          
-          {textbooks.length === 0 ? (
-            <p className="text-slate-500 italic">No textbooks uploaded yet. Use the form on the left!</p>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 max-h-[70vh] overflow-y-auto pr-2">
-              {textbooks.map((book) => (
-                <div key={book._id} className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md hover:border-slate-600 transition-all flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold text-indigo-300">{book.title}</h3>
-                    <p className="text-xs text-slate-400 mb-2">By {book.author || 'Unknown Author'}</p>
-                    <p className="text-sm text-slate-300 line-clamp-3 bg-slate-900/50 p-3 rounded-xl border border-slate-800 italic">
-                      "{book.rawText}"
-                    </p>
+        {/* Dynamic Light Workspace main panel */}
+        <main className="flex-1 p-8 bg-[#F4F5F9] overflow-y-auto pb-32">
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">Create Audiobook</h2>
+                <p className="text-xs text-slate-500">Convert text into immersive AI-generated narration.</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                <div className="lg:col-span-5 bg-white p-1 rounded-2xl shadow-sm border border-slate-200/60">
+                  <CreateAudiobook onSubmit={handleUploadTextbook} loading={loading} message={message} />
+                </div>
+
+                {/* MODIFIED: Table container background is slate-100 instead of pure white */}
+                <div className="lg:col-span-7 bg-slate-100/90 border border-slate-200 p-6 rounded-2xl shadow-inner space-y-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-bold text-purple-700 uppercase tracking-wider">Library Items</h3>
+                    <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md font-bold">
+                      {textbooks.length} Total Projects
+                    </span>
                   </div>
                   
-                  <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                    <span>Uploaded by: {book.uploadedBy}</span>
-                    <button 
-                      onClick={() => handlePlayAudio(book._id, book.title)}
-                      disabled={audioLoadingId !== null}
-                      className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/30 text-indigo-300 hover:text-white font-medium py-1.5 px-4 rounded-xl transition-all"
-                    >
-                      {audioLoadingId === book._id ? 'Generating Voice... 🎙️' : 'Listen Audio 🎧'}
-                    </button>
-                  </div>
+                  {textbooks.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No textbooks loaded. Create one on the left!</p>
+                  ) : (
+                    <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2">
+                      {textbooks.map((book) => {
+                        const isThisBookActive = activeBookTitle === book.title;
+                        return (
+                          // MODIFIED: Card background is clean slate-50 styling over white panel
+                          <div key={book._id} className="bg-white/80 border border-slate-200/50 p-4 rounded-xl flex items-center justify-between transition-all hover:bg-white hover:border-purple-300 hover:shadow-sm">
+                            <div className="flex-1 min-w-0 pr-4">
+                              <h4 className="text-sm font-bold text-slate-800 truncate">{book.title}</h4>
+                              <p className="text-[10px] text-slate-500 truncate">By {book.author || 'Unknown Author'}</p>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                              {currentAudio && isThisBookActive && isPlaying && (
+                                <div className="bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                                  <AudioVisualizer audioUrl={currentAudio} />
+                                </div>
+                              )}
+                              <button 
+                                onClick={() => handlePlayAudio(book._id, book.title)}
+                                disabled={audioLoadingId !== null && audioLoadingId !== book._id}
+                                className={`px-4 py-2 rounded-xl transition-all text-xs font-bold shadow-sm ${
+                                  isThisBookActive && isPlaying 
+                                    ? 'bg-amber-500 text-white hover:bg-amber-600' 
+                                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                                }`}
+                              >
+                                {audioLoadingId === book._id 
+                                  ? 'Loading...' 
+                                  : (isThisBookActive && isPlaying ? 'Pause ⏸️' : 'Listen 🎧')
+                                }
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              ))}
+
+              </div>
             </div>
           )}
-        </div>
+
+          {activeTab === 'library' && (
+            <div className="text-center text-xs text-slate-400 p-12 bg-slate-100 rounded-2xl border border-slate-200">
+              Full repository catalog view streaming module active.
+            </div>
+          )}
+        </main>
       </div>
 
-      {/* FIXED BOTTOM AUDIO PLAYER BAR */}
+      {/* MODIFIED: TRANSPARENT GLASSMORPHIC FLOATING BOTTOM PLAYER CARD */}
       {currentAudio && (
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-800/95 backdrop-blur-md border-t border-slate-700 py-4 px-6 flex flex-col md:flex-row items-center justify-between shadow-2xl z-50 animate-slide-up">
-          <div className="mb-2 md:mb-0 text-center md:text-left">
-            <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Now Playing</p>
-            <p className="text-sm font-bold text-slate-200">{activeBookTitle}</p>
+        <div className="fixed bottom-4 left-72 right-8 bg-slate-950/80 backdrop-blur-lg border border-slate-800/80 py-4 px-8 flex items-center justify-between shadow-2xl rounded-2xl z-50 animate-slide-up text-white">
+          <div className="flex items-center gap-4">
+            {/* Play-Pause Ring element */}
+            <button 
+              onClick={toggleGlobalPlayback}
+              className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold hover:bg-purple-500 transition-all active:scale-95 shadow-md shadow-purple-600/30"
+            >
+              {isPlaying ? '⏸️' : '▶️'}
+            </button>
+            <div>
+              <p className="text-[9px] font-bold text-purple-400 uppercase tracking-widest animate-pulse">
+                {isPlaying ? '● Streaming Synthesis' : 'Ⅱ Synthesizer Paused'}
+              </p>
+              <p className="text-sm font-bold text-slate-100">{activeBookTitle}</p>
+            </div>
           </div>
-          <div className="w-full md:w-auto max-w-xl">
-            <audio src={currentAudio} controls autoPlay className="w-full accent-indigo-500" />
+          
+          <div className="text-xs bg-purple-500/10 text-purple-400 px-5 py-2 rounded-full border border-purple-500/20 font-bold">
+            🔊 Synthesizer Active
           </div>
         </div>
       )}
