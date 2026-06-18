@@ -85,43 +85,43 @@ exports.getTextbookById = async (req, res) => {
   }
 };
 
-// 4. TEXTBOOK TEXT KO AUDIO MEIN CONVERT KARNE KA FUNCTION
+// 4. TEXTBOOK TEXT KO AUDIO MEIN CONVERT KARNE KA FUNCTION (UPDATED)
 exports.generateAudioForTextbook = async (req, res) => {
   try {
-    // 1. ID se book dhoondo
     const textbook = await Textbook.findById(req.params.id);
     
     if (!textbook) {
-      return res.status(404).json({
-        success: false,
-        message: 'Book not found with the provided ID. Please check and try again.'
-      });
+      return res.status(404).json({ success: false, message: 'Book nahi mili!' });
     }
 
-    // 2. Google TTS API ka use karke text se MP3 URL generate karo
-    // Hum text ka ek chota hissa (pehle 200 characters) sample ke liye bhej rahe hain
-    const audioBase64Url = googleTTS.getAudioUrl(textbook.rawText.substring(0, 200), {
+    // Saaf text nikalte hain bina special characters ke
+    const cleanText = textbook.rawText.substring(0, 200).replace(/[^a-zA-Z0-9 .,!?]/g, "");
+
+    // NAYA TARIKA: Hum URL ke bajaye pure base64 audio data nikalenge
+    const base64Audio = await googleTTS.getAudioBase64(cleanText, {
       lang: 'en',
       slow: false,
       host: 'https://translate.google.com',
+      timeout: 10000,
     });
 
-    // 3. Database mein is audio URL ko update kar dete hain
-    textbook.audioUrl = audioBase64Url;
+    // Frontend ko direct Data URI format mein bhejenge jo har player turant chala deta hai
+    const audioDataUrl = `data:audio/mp3;base64,${base64Audio}`;
+
+    textbook.audioUrl = audioDataUrl;
     await textbook.save();
 
-    // 4. Frontend ko success message aur audio link bhej do
     res.status(200).json({
       success: true,
       message: 'Audio engine successfully generated speech! 🎧',
-      audioUrl: audioBase64Url,
+      audioUrl: audioDataUrl,
       bookTitle: textbook.title
     });
 
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'error: Unable to generate audio for the textbook.',
+      message: 'Error generating audio.',
       error: error.message
     });
   }
