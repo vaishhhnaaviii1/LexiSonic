@@ -1,1 +1,48 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", sans-serif;
+  
+  --color-lexi-primary: #6E3482;
+  --color-lexi-dark: #49225B;
+  --color-lexi-secondary: #A56ABD;
+  --color-lexi-bg: #F5EBFA;
+  --color-lexi-surface: #E7DBEF;
+  --color-lexi-card-hover: #FBF8FD;
+  --color-lexi-white: #FFFFFF;
+  
+  --color-lexi-text: #2E2140;
+  --color-lexi-muted: #6F6182;
+  --color-lexi-gold: #F4C95D;
+  --color-lexi-border: rgba(73, 34, 91, 0.10);
+
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+
+  --background-image-gradient-sidebar: linear-gradient(180deg, #49225B 0%, #6E3482 55%, #A56ABD 100%);
+  --background-image-gradient-primary: linear-gradient(135deg, #6E3482, #A56ABD);
+  --background-image-gradient-hover: linear-gradient(135deg, #7B4090, #B97DCC);
+}
+
+body {
+  background-color: var(--color-lexi-bg);
+  color: var(--color-lexi-text);
+  margin: 0;
+  font-family: var(--font-sans);
+}
+
+/* Premium Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-lexi-surface);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-lexi-secondary);
+}
