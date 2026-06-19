@@ -1,25 +1,33 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import axios from 'axios';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import CreateAudiobook from './components/CreateAudiobook';
 import AudioVisualizer from './AudioVisualizer';
+import Auth from './components/Auth'; // <-- Auth component import kiya
+import { AuthContext } from './context/AuthContext'; // <-- AuthContext import kiya
 
 function App() {
+  const { token, loading: authLoading } = useContext(AuthContext); // <-- Global login state nikal li
+  
   const [activeTab, setActiveTab] = useState('dashboard');
   const [textbooks, setTextbooks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [audioLoadingId, setAudioLoadingId] = useState(null);
   const [currentAudio, setCurrentAudio] = useState('');
   const [activeBookTitle, setActiveBookTitle] = useState('');
-  const [isPlaying, setIsPlaying] = useState(false); // Live state indicator for toggle
+  const [isPlaying, setIsPlaying] = useState(false); 
   const [message, setMessage] = useState({ type: '', text: '' });
 
   const audioRef = useRef(null);
 
+  // STEP 3 IMPLEMENTATION: Fetch data with JWT Header
   const fetchTextbooks = async () => {
+    if (!token) return; // Agar logged in nahi hai toh fetch mat karo
     try {
-      const response = await axios.get('http://localhost:5000/api/textbooks');
+      const response = await axios.get('http://localhost:5000/api/textbooks', {
+        headers: { Authorization: `Bearer ${token}` } // <-- Headers pass kiya
+      });
       if (response.data.success) setTextbooks(response.data.data);
     } catch (err) {
       console.error("Fetch layout error", err);
@@ -28,16 +36,19 @@ function App() {
 
   useEffect(() => {
     fetchTextbooks();
-  }, []);
+  }, [token]); // Jab user login ho, tabhi fetch trigger ho
 
+  // STEP 3 IMPLEMENTATION: Post data with JWT Header
   const handleUploadTextbook = async (formData) => {
     setLoading(true);
     setMessage({ type: '', text: '' });
     try {
-      const response = await axios.post('http://localhost:5000/api/textbooks', {
-        ...formData,
-        uploadedBy: 'Vaishnavi'
-      });
+      const response = await axios.post('http://localhost:5000/api/textbooks', 
+        { ...formData }, // Note: 'uploadedBy' ab backend khud nikal lega token se!
+        {
+          headers: { Authorization: `Bearer ${token}` } // <-- Headers pass kiya
+        }
+      );
       if (response.data.success) {
         setMessage({ type: 'success', text: 'Boom! Project saved to library! 📚' });
         fetchTextbooks();
@@ -49,9 +60,7 @@ function App() {
     }
   };
 
-  // Upgraded Audio Function with Play/Pause state toggle
   const handlePlayAudio = async (bookId, bookTitle) => {
-    // Agar wahi same audio baj raha hai, toh naya fetch mat karo, use hi pause/play karo!
     if (activeBookTitle === bookTitle && currentAudio) {
       if (isPlaying) {
         audioRef.current.pause();
@@ -65,13 +74,15 @@ function App() {
 
     setAudioLoadingId(bookId);
     try {
-      const response = await axios.get(`http://localhost:5000/api/textbooks/${bookId}/audio`);
+      // Audio stream api mein bhi secure header lagaya
+      const response = await axios.get(`http://localhost:5000/api/textbooks/${bookId}/audio`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (response.data.success) {
         setCurrentAudio(response.data.audioUrl);
         setActiveBookTitle(bookTitle);
         setIsPlaying(true);
         
-        // Load target inside core ref
         if (audioRef.current) {
           audioRef.current.src = response.data.audioUrl;
           audioRef.current.play();
@@ -84,7 +95,6 @@ function App() {
     }
   };
 
-  // Master Global Player Toggle Action
   const toggleGlobalPlayback = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
@@ -96,9 +106,23 @@ function App() {
     }
   };
 
+  // 1. Agar authentication loading chal rahi hai
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-bold">
+        Loading LexiSonic Engine...
+      </div>
+    );
+  }
+
+  // 2. Agar user logged in nahi hai (Token nahi hai), toh pure dashboard ki jagah Login Screen dikhao
+  if (!token) {
+    return <Auth />;
+  }
+
+  // 3. User logged in hai, ab normal application layout render hoga
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased flex">
-      {/* Invisible core HTML5 audio player tracking stream */}
       <audio ref={audioRef} onEnded={() => setIsPlaying(false)} className="hidden" />
 
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -106,7 +130,6 @@ function App() {
       <div className="flex-1 pl-64 flex flex-col min-h-screen">
         <Header />
 
-        {/* Dynamic Light Workspace main panel */}
         <main className="flex-1 p-8 bg-[#F4F5F9] overflow-y-auto pb-32">
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
@@ -116,12 +139,10 @@ function App() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                
                 <div className="lg:col-span-5 bg-white p-1 rounded-2xl shadow-sm border border-slate-200/60">
                   <CreateAudiobook onSubmit={handleUploadTextbook} loading={loading} message={message} />
                 </div>
 
-                {/* MODIFIED: Table container background is slate-100 instead of pure white */}
                 <div className="lg:col-span-7 bg-slate-100/90 border border-slate-200 p-6 rounded-2xl shadow-inner space-y-4">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-bold text-purple-700 uppercase tracking-wider">Library Items</h3>
@@ -137,7 +158,6 @@ function App() {
                       {textbooks.map((book) => {
                         const isThisBookActive = activeBookTitle === book.title;
                         return (
-                          // MODIFIED: Card background is clean slate-50 styling over white panel
                           <div key={book._id} className="bg-white/80 border border-slate-200/50 p-4 rounded-xl flex items-center justify-between transition-all hover:bg-white hover:border-purple-300 hover:shadow-sm">
                             <div className="flex-1 min-w-0 pr-4">
                               <h4 className="text-sm font-bold text-slate-800 truncate">{book.title}</h4>
@@ -171,7 +191,6 @@ function App() {
                     </div>
                   )}
                 </div>
-
               </div>
             </div>
           )}
@@ -184,11 +203,9 @@ function App() {
         </main>
       </div>
 
-      {/* MODIFIED: TRANSPARENT GLASSMORPHIC FLOATING BOTTOM PLAYER CARD */}
       {currentAudio && (
         <div className="fixed bottom-4 left-72 right-8 bg-slate-950/80 backdrop-blur-lg border border-slate-800/80 py-4 px-8 flex items-center justify-between shadow-2xl rounded-2xl z-50 animate-slide-up text-white">
           <div className="flex items-center gap-4">
-            {/* Play-Pause Ring element */}
             <button 
               onClick={toggleGlobalPlayback}
               className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold hover:bg-purple-500 transition-all active:scale-95 shadow-md shadow-purple-600/30"

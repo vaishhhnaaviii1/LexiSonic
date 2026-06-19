@@ -1,4 +1,5 @@
 const cors = require('cors');
+const authRoutes = require('./routes/auth');
 
 //Hum 'express' library ko apne project mein include kar rahe hain taaki hum API bana sakein.
 const express = require('express');
@@ -15,6 +16,7 @@ const app = express();
 //Yeh ek middleware hai jo hamare server ko batata hai ki agar frontend se koi JSON data aaye, toh use kaise samajhna hai.
 app.use(express.json());
 app.use(cors());// Yeh hamare frontend ko backend se connect hone ki permission dega
+app.use('/api/auth', authRoutes);
 
 //Hum '.env' file ke andar se MONGO_URI (connection string) ko nikal kar ek variable mein save kar rahe hain.
 const mongoURI = process.env.MONGO_URI;
@@ -33,6 +35,10 @@ mongoose.connect(mongoURI)
 
 // Textbook ke routes ko import kiya
 const textbookRoutes = require('./routes/textbookRoutes');
+
+// JO AAPKA TEXTBOOK ROUTE THA, usme middleware apply kar do taaki koi bina login ke access na kare:
+const authMiddleware = require('./middleware/authMiddleware');
+app.use('/api/textbooks', authMiddleware, textbookRoutes);
 
 // Express ko bataya ki jab bhi URL mein '/api/textbooks' aaye, toh textbookRoutes use karo
 app.use('/api/textbooks', textbookRoutes);
