@@ -1,36 +1,28 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState } from 'react';
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token') || null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Agar local storage mein token hai, toh page refresh par bhi state login rahegi
-    if (token) {
-      localStorage.setItem('token', token);
-      // Optional: Aap yahan backend par ek '/me' endpoint maar kar user details verify bhi kar sakte ho
-    } else {
-      localStorage.removeItem('token');
-    }
-    setLoading(false);
-  }, [token]);
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
 
   const login = (jwtToken, userData) => {
+    localStorage.setItem('token', jwtToken);
+    localStorage.setItem('user', JSON.stringify(userData));
     setToken(jwtToken);
     setUser(userData);
   };
 
   const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setToken(null);
     setUser(null);
-    localStorage.removeItem('token');
+    window.location.href = '/'; // Force reload to clear states
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+    <AuthContext.Provider value={{ token, user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
