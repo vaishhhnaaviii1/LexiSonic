@@ -1,5 +1,6 @@
 const cors = require('cors');
 const authRoutes = require('./routes/auth');
+const ocrRoutes = require('./routes/ocrRoutes');
 
 //Hum 'express' library ko apne project mein include kar rahe hain taaki hum API bana sakein.
 const express = require('express');
@@ -17,6 +18,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());// Yeh hamare frontend ko backend se connect hone ki permission dega
 app.use('/api/auth', authRoutes);
+app.use('/api/ocr', ocrRoutes);
 
 //Hum '.env' file ke andar se MONGO_URI (connection string) ko nikal kar ek variable mein save kar rahe hain.
 const mongoURI = process.env.MONGO_URI;

@@ -1,26 +1,35 @@
-// Hamare banaye huye Textbook Model ko import kar rahe hain
+// Importing the required packages and our Textbook Model
 const googleTTS = require('google-tts-api');
 const Textbook = require('../models/Textbook');
 
-// 1. Nayi Textbook upload/save karne ka function
+// 1. FUNCTION TO UPLOAD/SAVE A NEW TEXTBOOK
 exports.uploadTextbook = async (req, res) => {
   try {
-    // Frontend se jo data aayega (body mein), use nikal rahe hain
+    // Extracting data sent from the frontend (inside req.body)
     const { title, author, uploadedBy, rawText, audioUrl } = req.body;
 
-    // Model ka use karke database mein ek naya document bana rahe hain
+    // --- ADDED VALIDATION CHECK ---
+    // Checking if the required fields are empty before hitting the database
+    if (!title || !rawText || !uploadedBy) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation Error: Title, rawText, and uploadedBy are required fields!'
+      });
+    }
+
+    // Creating a new document using the model
     const newTextbook = new Textbook({
       title,
-      author,
+      author: author || 'Unknown Author', // Fallback if author is not provided
       uploadedBy,
       rawText,
       audioUrl
     });
 
-    // `.save()` command database mein data ko permanently save kar degi
+    // The `.save()` command permanently saves the data into the MongoDB database
     const savedTextbook = await newTextbook.save();
 
-    // Agar successfully save ho gaya, toh frontend ko 21 status code (Created) aur data bhej do
+    // If successfully saved, send a 201 status code (Created) along with the data
     res.status(201).json({
       success: true,
       message: 'Textbook successfully saved in database! 📚',
@@ -28,7 +37,7 @@ exports.uploadTextbook = async (req, res) => {
     });
 
   } catch (error) {
-    // Agar koi galti hoti hai (jaise required field missing), toh error response bhejo
+    // If an error occurs, send a 500 Server Error response
     res.status(500).json({
       success: false,
       message: 'Server error: Unable to save book.',
@@ -37,11 +46,12 @@ exports.uploadTextbook = async (req, res) => {
   }
 };
 
-// 2. SAARI TEXTBOOKS KI LIST GET KARNE KA FUNCTION
+// 2. FUNCTION TO FETCH THE LIST OF ALL TEXTBOOKS
 exports.getAllTextbooks = async (req, res) => {
   try {
-    // .find() database se saare documents nikal kar ek array bana dega
-    const textbooks = await Textbook.find().sort({ createdAt: -1 }); // -1 se nayi books sabse upar dikhengi
+    // .find() fetches all documents and returns them as an array
+    // .sort({ createdAt: -1 }) ensures the newest books appear at the top
+    const textbooks = await Textbook.find().sort({ createdAt: -1 });
     
     res.status(200).json({
       success: true,
@@ -51,19 +61,19 @@ exports.getAllTextbooks = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Not able to fetch  books.',
+      message: 'Not able to fetch books.',
       error: error.message
     });
   }
 };
 
-// 3. KISI EK SPECIFIC TEXTBOOK KA DATA ID SE NIKALNE KA FUNCTION
+// 3. FUNCTION TO FETCH A SPECIFIC TEXTBOOK BY ITS ID
 exports.getTextbookById = async (req, res) => {
   try {
-    // req.params.id se hum URL ke andar bheji gayi ID ko read kar rahe hain
+    // Reading the ID passed in the URL using req.params.id
     const textbook = await Textbook.findById(req.params.id);
 
-    // Agar us ID ki koi book database mein nahi milti
+    // If no book matches that ID in the database
     if (!textbook) {
       return res.status(404).json({
         success: false,
@@ -71,7 +81,7 @@ exports.getTextbookById = async (req, res) => {
       });
     }
 
-    // Agar mil gayi, toh response bhej do
+    // If found, send the data back as a response
     res.status(200).json({
       success: true,
       data: textbook
@@ -85,19 +95,24 @@ exports.getTextbookById = async (req, res) => {
   }
 };
 
-// 4. TEXTBOOK TEXT KO AUDIO MEIN CONVERT KARNE KA FUNCTION (UPDATED)
+// 4. FUNCTION TO CONVERT TEXTBOOK TEXT TO AUDIO (TTS)
 exports.generateAudioForTextbook = async (req, res) => {
   try {
+    // Find the textbook by ID first
     const textbook = await Textbook.findById(req.params.id);
     
     if (!textbook) {
-      return res.status(404).json({ success: false, message: 'Book nahi mili!' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Textbook not found!' 
+      });
     }
 
-    // Saaf text nikalte hain bina special characters ke
+    // Cleaning the text: keeping only alphanumeric characters and basic punctuation
+    // Also taking the first 200 characters to ensure quick generation during testing
     const cleanText = textbook.rawText.substring(0, 200).replace(/[^a-zA-Z0-9 .,!?]/g, "");
 
-    // NAYA TARIKA: Hum URL ke bajaye pure base64 audio data nikalenge
+    // Generating base64 audio data using Google TTS API
     const base64Audio = await googleTTS.getAudioBase64(cleanText, {
       lang: 'en',
       slow: false,
@@ -105,9 +120,10 @@ exports.generateAudioForTextbook = async (req, res) => {
       timeout: 10000,
     });
 
-    // Frontend ko direct Data URI format mein bhejenge jo har player turant chala deta hai
+    // Formatting as a Data URI so the frontend audio player can play it immediately
     const audioDataUrl = `data:audio/mp3;base64,${base64Audio}`;
 
+    // Saving the generated audio URL back to the textbook document in MongoDB
     textbook.audioUrl = audioDataUrl;
     await textbook.save();
 
